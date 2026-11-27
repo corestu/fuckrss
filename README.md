@@ -52,6 +52,49 @@ WordPress 插件：按 User-Agent 关键词识别 RSS 抓取者，命中后改�
 | `the_excerpt_rss` | 拆分摘要句子，插入加料句 |
 | `the_title_rss` | 仅改主循环中最后一篇的标题 |
 
+## 缓存
+
+Feed 内容按 UA 变化，而 UA 判定只在 PHP 内执行。只要有缓存层直接返回旧副本，命中 UA 就拿不到加料内容，功能等于失效。因此启用插件后，**所有** Feed 响应都会发送：
+
+```
+Cache-Control: no-store, no-cache, must-revalidate, max-age=0
+Pragma: no-cache
+Expires: Wed, 11 Jan 1984 05:00:00 GMT
+X-Accel-Expires: 0
+Vary: User-Agent
+X-FuckRSS: hit          # 仅命中请求
+```
+
+| 头 | 作用 |
+| --- | --- |
+| `X-Accel-Expires: 0` | Nginx `fastcgi_cache` / `proxy_cache` 据此禁用缓存 |
+| `no-store` | 浏览器、CDN、页面缓存插件不再存储 |
+| `Vary: User-Agent` | 遵循该头的 CDN 按 UA 分键 |
+
+### FastCGI cache
+
+Nginx 默认遵循上游的 `Cache-Control` 与 `X-Accel-Expires`，上述头即可生效。若站点在 `fastcgi_ignore_headers` 中忽略了它们，PHP 端无法覆盖，需要在 Nginx 侧按 UA 跳过缓存：
+
+```nginx
+map $http_user_agent $fuckrss_bypass {
+    default 0;
+    ~*(feedspot|bloghui) 1;   # 与后台关键词保持一致
+}
+
+fastcgi_cache_bypass $fuckrss_bypass;
+fastcgi_no_cache    $fuckrss_bypass;
+```
+
+注意 `Vary` 只在 CDN 与浏览器层生效，Nginx `fastcgi_cache` 不按 `Vary` 分键（仅 `Vary: *` 会拒绝缓存）。
+
+### 验证
+
+```bash
+curl -sI -A "BlogHui/1.0" https://example.com/feed/
+```
+
+命中时应看到 `X-FuckRSS: hit` 与 `Cache-Control: no-store`。若缺少，说明请求在到达 PHP 前已被缓存层响应。缓存里若已存有正常副本，该副本会继续服务到过期，期间加料不生效（但不会把加料内容泄露给其他读者）。
+
 ## 卸载
 
 `uninstall.php` 删除 `fuckrss_settings` 与 `fuckrss_` 前缀的 transient，多站点下逐站点执行。插件不创建自定义表，也不注册定时任务。

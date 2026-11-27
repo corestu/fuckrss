@@ -27,25 +27,25 @@ class Fuckrss_Guard {
 
 	public function register() {
 		add_action( 'template_redirect', array( $this, 'maybe_tamper' ), 1 );
-		add_action( 'template_redirect', array( $this, 'send_feed_cache_headers' ), 1 );
 	}
 
 	/**
-	 * Feed 内容随 UA 变化，禁止浏览器与中转层缓存；Nginx 侧由 fastcgi_cache 跳过规则兜底。
+	 * Feed 内容随 UA 变化，缓存层必须放弃存储，否则命中 UA 会拿到缓存的正常副本，加料全部失效。
+	 * X-Accel-Expires 供 Nginx / FastCGI cache 判定，Cache-Control 供浏览器、CDN 与页面缓存判定。
 	 */
-	public function send_feed_cache_headers() {
-		if ( ! is_feed() ) {
+	public function send_no_cache_headers() {
+		if ( headers_sent() ) {
 			return;
 		}
 
-		header_remove( 'Cache-Control' );
-		header_remove( 'Pragma' );
-		header_remove( 'Expires' );
-		header_remove( 'Vary' );
+		foreach ( array( 'Cache-Control', 'Pragma', 'Expires', 'X-Accel-Expires', 'Vary' ) as $name ) {
+			header_remove( $name );
+		}
 
-		header( 'Cache-Control: no-cache, must-revalidate, max-age=0' );
+		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
 		header( 'Pragma: no-cache' );
 		header( 'Expires: Wed, 11 Jan 1984 05:00:00 GMT' );
+		header( 'X-Accel-Expires: 0' );
 		header( 'Vary: User-Agent' );
 	}
 
@@ -63,6 +63,9 @@ class Fuckrss_Guard {
 			return;
 		}
 
+		// 命中判定依赖 UA，必须在 PHP 里执行，故启用后所有 Feed 请求都不允许被缓存。
+		$this->send_no_cache_headers();
+
 		$ua = $this->user_agent();
 		if ( '' === $ua ) {
 			return;
@@ -78,6 +81,10 @@ class Fuckrss_Guard {
 
 		if ( '' === $this->sentence && '' === $this->title ) {
 			return;
+		}
+
+		if ( ! headers_sent() ) {
+			header( 'X-FuckRSS: hit' );
 		}
 
 		if ( '' !== $this->sentence ) {

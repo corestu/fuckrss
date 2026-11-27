@@ -22,6 +22,7 @@ FuckRSS 在 Feed 输出前（template_redirect）检查请求的 User-Agent，�
 * 摘要加料句与加料标题都留空的规则不生效，需逐条填写
 * 加料标题只替换 Feed 最后一篇的标题，其余文章标题不变
 * 其余 Feed 数据不变
+* 启用后 Feed 响应带 no-store 与 X-Accel-Expires: 0，避免缓存层让 UA 判定失效
 * 总开关，关闭后摘要与标题立即恢复原样
 * 卸载时清理全部配置与 transient，不留残留数据
 
@@ -51,6 +52,10 @@ FuckRSS 在 Feed 输出前（template_redirect）检查请求的 User-Agent，�
 = 加料标题替换的是哪一篇？ =
 
 Feed 输出顺序中的最后一篇（默认排序下即检索结果里最早的一篇）。该规则的加料标题留空时不做替换。
+
+= 缓存会不会让加料失效？ =
+
+会，所以插件在启用后对所有 Feed 响应发送 `Cache-Control: no-store` 与 `X-Accel-Expires: 0`，避免缓存层直接返回正常副本。Nginx 若用 `fastcgi_ignore_headers` 忽略了这两个头，需在服务端按 UA 配置 `fastcgi_cache_bypass`，示例见 README.md 的「缓存」一节。
 
 = 卸载后会留下数据吗？ =
 
