@@ -27,6 +27,26 @@ class Fuckrss_Guard {
 
 	public function register() {
 		add_action( 'template_redirect', array( $this, 'maybe_tamper' ), 1 );
+		add_action( 'template_redirect', array( $this, 'send_feed_cache_headers' ), 1 );
+	}
+
+	/**
+	 * Feed 内容随 UA 变化，禁止浏览器与中转层缓存；Nginx 侧由 fastcgi_cache 跳过规则兜底。
+	 */
+	public function send_feed_cache_headers() {
+		if ( ! is_feed() ) {
+			return;
+		}
+
+		header_remove( 'Cache-Control' );
+		header_remove( 'Pragma' );
+		header_remove( 'Expires' );
+		header_remove( 'Vary' );
+
+		header( 'Cache-Control: no-cache, must-revalidate, max-age=0' );
+		header( 'Pragma: no-cache' );
+		header( 'Expires: Wed, 11 Jan 1984 05:00:00 GMT' );
+		header( 'Vary: User-Agent' );
 	}
 
 	/**
